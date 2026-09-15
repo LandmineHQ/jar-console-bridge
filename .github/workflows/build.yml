@@ -1,0 +1,63 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build server.jar
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Build
+        run: ./mvnw -B -ntp clean package
+
+      - name: Verify artifact
+        run: |
+          test -f target/server.jar
+          jar tf target/server.jar | grep -qx "ShimMain.class"
+          jar tf target/server.jar | grep -qx "server__autoLaunch.sh"
+          jar tf target/server.jar | grep -qx "server__path.sh"
+
+      - name: Upload server.jar
+        uses: actions/upload-artifact@v7
+        with:
+          name: server-jar
+          path: target/server.jar
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Write build information
+        run: |
+          {
+            echo "## Build artifact"
+            echo
+            echo "- Build ID: \`${{ github.run_id }}\`"
+            echo "- Commit: \`${{ github.sha }}\`"
+            echo "- Artifact name: \`server-jar\`"
+          } >> "$GITHUB_STEP_SUMMARY"

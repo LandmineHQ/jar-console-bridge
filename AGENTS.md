@@ -33,6 +33,7 @@ bash -n src/main/resources/server__autoLaunch.sh
 sh -n src/main/resources/server__autoLaunch.sh
 sh -n src/main/resources/server__path.sh
 jar tf target/server.jar
+actionlint .github/workflows/*.yml
 ```
 
 Before finishing, verify that the jar contains:
@@ -45,6 +46,8 @@ Before finishing, verify that the jar contains:
 ## Critical Invariants
 
 - Keep the Maven output name as `server.jar` for panel compatibility.
+- Keep the build workflow artifact name as `server-jar`; the release workflow
+  downloads artifacts by this name.
 - Keep the manifest main class as `ShimMain`.
 - Keep `server__autoLaunch.sh` running in the background.
 - Keep the interactive shell in the foreground with inherited stdio.
@@ -78,3 +81,15 @@ See `REPO_MAP.md` for the complete tracked and generated file map.
 - Do not commit `target/` or runtime-extracted scripts from the repository root.
 - Use Conventional Commits for commit messages, for example
   `fix: handle missing bash fallback`.
+
+## CI/CD Behavior
+
+- `.github/workflows/build.yml` builds on pushes, pull requests, and manual
+  dispatches, then uploads `target/server.jar` as the `server-jar` artifact.
+- `.github/workflows/release.yml` is manually dispatched with a successful
+  GitHub Actions run ID and a semantic version.
+- The release workflow verifies the selected run, downloads its `server-jar`
+  artifact, and gives the asset a build-specific filename.
+- If the version does not exist, the workflow creates a draft release.
+- If the release already exists, the workflow adds the new build asset without
+  replacing other build assets.

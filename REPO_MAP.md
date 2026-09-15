@@ -4,6 +4,10 @@
 
 ```text
 .
+├── .github/
+│   └── workflows/
+│       ├── build.yml
+│       └── release.yml
 ├── .gitattributes
 ├── .gitignore
 ├── .mvn/
@@ -28,6 +32,8 @@
 
 | Path | Responsibility |
 | --- | --- |
+| `.github/workflows/build.yml` | Builds the jar on CI events and uploads the `server-jar` artifact. |
+| `.github/workflows/release.yml` | Manually attaches a selected build artifact to a draft or existing release. |
 | `.gitattributes` | Enforces line endings for shell, Windows, and text files. |
 | `.gitignore` | Excludes Maven output, jars, runtime-extracted scripts, IDE files, logs, and local secrets. |
 | `.mvn/wrapper/maven-wrapper.properties` | Pins the Maven distribution used by the wrapper. |
@@ -49,6 +55,25 @@
 4. An interactive shell starts in the foreground with inherited panel stdio.
 5. Bash is used when available; otherwise the bridge falls back to sh.
 6. The background process is terminated when the foreground shell exits.
+
+## GitHub Workflows
+
+### Build
+
+`build.yml` runs on branch pushes, version tag pushes, pull requests targeting
+`main`, and manual dispatch. It builds `target/server.jar`, validates the
+embedded resources, and uploads the artifact as `server-jar`.
+
+### Release
+
+`release.yml` runs through manual dispatch with two inputs:
+
+- `build_id`: a successful GitHub Actions run ID
+- `version`: a semantic version such as `v1.0.0`
+
+The workflow validates the selected build, downloads `server-jar`, and renames
+the asset with the version, build ID, and commit SHA. If the release exists,
+the asset is added to it. Otherwise, a draft release is created.
 
 ## Generated Files
 
