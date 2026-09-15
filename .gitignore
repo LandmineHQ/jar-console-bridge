@@ -1,0 +1,46 @@
+# Maven build output
+/target/
+/build/
+/out/
+/dist/
+/*.jar
+/server.jar
+dependency-reduced-pom.xml
+.flattened-pom.xml
+.mvn/timing.properties
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+release.properties
+
+# Runtime-extracted resources next to the jar
+/server__autoLaunch.sh
+/server__path.sh
+
+# Runtime logs and JVM crash output
+*.log
+hs_err_pid*
+replay_pid*
+
+# IDEs
+.idea/
+.vscode/
+.classpath
+.project
+.settings/
+.factorypath
+.apt_generated/
+*.iml
+
+# Operating system metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+
+# Java class files outside target
+*.class
