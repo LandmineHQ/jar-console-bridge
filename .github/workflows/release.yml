@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       build_id:
-        description: "GitHub Actions run ID containing server-jar and hash-named native artifacts"
+        description: "GitHub Actions run ID containing server_jar and server_linux_x64 artifacts"
         required: true
         type: string
       version:
@@ -61,12 +61,11 @@ jobs:
           fi
 
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
-          echo "short_sha=${HEAD_SHA:0:7}" >> "$GITHUB_OUTPUT"
 
       - name: Download server.jar
         uses: actions/download-artifact@v8
         with:
-          name: server-jar
+          name: server_jar
           path: release-assets/java
           run-id: ${{ inputs.build_id }}
           repository: ${{ github.repository }}
@@ -75,49 +74,44 @@ jobs:
       - name: Download native binary
         uses: actions/download-artifact@v8
         with:
-          pattern: server_linux-x64__*
+          name: server_linux_x64
           path: release-assets/native
-          merge-multiple: true
           run-id: ${{ inputs.build_id }}
           repository: ${{ github.repository }}
           github-token: ${{ github.token }}
 
       - name: Prepare release assets
         id: assets
-        env:
-          BUILD_ID: ${{ inputs.build_id }}
-          VERSION: ${{ inputs.version }}
-          SHORT_SHA: ${{ steps.build.outputs.short_sha }}
         run: |
           JAR_SOURCE="release-assets/java/server.jar"
-          BINARY_ASSET="$(find release-assets/native -maxdepth 1 -type f -name 'server_linux-x64__*' -print -quit)"
+          BINARY_SOURCE="release-assets/native/server"
+          CHECKSUM_ASSET="release-assets/SHA256SUMS"
+
           test -f "$JAR_SOURCE"
-          test -n "$BINARY_ASSET"
+          test -f "$BINARY_SOURCE"
 
-          BINARY_NAME="$(basename "$BINARY_ASSET")"
-          FILENAME_HASH="${BINARY_NAME##*__}"
-          if [[ ! "$FILENAME_HASH" =~ ^[0-9a-f]{64}$ ]]; then
-            echo "native artifact does not have a valid SHA-256 suffix: $BINARY_NAME" >&2
-            exit 1
-          fi
-
-          ACTUAL_HASH="$(sha256sum "$BINARY_ASSET" | awk '{print $1}')"
-          if [[ "$FILENAME_HASH" != "$ACTUAL_HASH" ]]; then
-            echo "native artifact hash does not match its filename." >&2
-            echo "filename=$FILENAME_HASH actual=$ACTUAL_HASH" >&2
-            exit 1
-          fi
-
-          ASSET_PREFIX="jar-console-bridge-${VERSION}-build-${BUILD_ID}-${SHORT_SHA}"
-          JAR_ASSET="release-assets/${ASSET_PREFIX}.jar"
+          JAR_HASH="$(sha256sum "$JAR_SOURCE" | awk '{print $1}')"
+          BINARY_HASH="$(sha256sum "$BINARY_SOURCE" | awk '{print $1}')"
+          JAR_ASSET="release-assets/server_jar__${JAR_HASH}.jar"
+          BINARY_ASSET="release-assets/server_linux_x64__${BINARY_HASH}"
 
           mv "$JAR_SOURCE" "$JAR_ASSET"
+          mv "$BINARY_SOURCE" "$BINARY_ASSET"
           chmod +x "$BINARY_ASSET"
+
+          {
+            echo "$JAR_HASH  $(basename "$JAR_ASSET")"
+            echo "$BINARY_HASH  $(basename "$BINARY_ASSET")"
+          } > "$CHECKSUM_ASSET"
 
           {
             echo "jar=$JAR_ASSET"
             echo "binary=$BINARY_ASSET"
-            echo "binary_name=$BINARY_NAME"
+            echo "checksums=$CHECKSUM_ASSET"
+            echo "jar_name=$(basename "$JAR_ASSET")"
+            echo "binary_name=$(basename "$BINARY_ASSET")"
+            echo "jar_hash=$JAR_HASH"
+            echo "binary_hash=$BINARY_HASH"
           } >> "$GITHUB_OUTPUT"
 
       - name: Create or update release
@@ -126,16 +120,19 @@ jobs:
           VERSION: ${{ inputs.version }}
           JAR_ASSET: ${{ steps.assets.outputs.jar }}
           BINARY_ASSET: ${{ steps.assets.outputs.binary }}
+          CHECKSUM_ASSET: ${{ steps.assets.outputs.checksums }}
           HEAD_SHA: ${{ steps.build.outputs.head_sha }}
         run: |
           if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $VERSION already exists. Adding build assets."
-            gh release upload "$VERSION" "$JAR_ASSET" "$BINARY_ASSET" \
+            gh release upload "$VERSION" \
+              "$JAR_ASSET" "$BINARY_ASSET" "$CHECKSUM_ASSET" \
               --repo "$GITHUB_REPOSITORY" \
               --clobber
           else
             echo "Release $VERSION does not exist. Creating a draft release."
-            gh release create "$VERSION" "$JAR_ASSET" "$BINARY_ASSET" \
+            gh release create "$VERSION" \
+              "$JAR_ASSET" "$BINARY_ASSET" "$CHECKSUM_ASSET" \
               --draft \
               --title "$VERSION" \
               --target "$HEAD_SHA" \
@@ -149,6 +146,9 @@ jobs:
             echo
             echo "- Version: \`${{ inputs.version }}\`"
             echo "- Build ID: \`${{ inputs.build_id }}\`"
-            echo "- Java asset: \`${{ steps.assets.outputs.jar }}\`"
+            echo "- Java asset: \`${{ steps.assets.outputs.jar_name }}\`"
             echo "- Native asset: \`${{ steps.assets.outputs.binary_name }}\`"
+            echo "- Checksums: \`SHA256SUMS\`"
+            echo "- Java SHA-256: \`${{ steps.assets.outputs.jar_hash }}\`"
+            echo "- Native SHA-256: \`${{ steps.assets.outputs.binary_hash }}\`"
           } >> "$GITHUB_STEP_SUMMARY"

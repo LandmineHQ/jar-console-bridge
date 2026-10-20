@@ -68,13 +68,12 @@ For native changes, also verify:
 ## Critical Invariants
 
 - Keep the Maven output name as `server.jar` for panel compatibility.
-- Keep the `server-jar` build workflow artifact name; release automation depends
-  on it.
-- Keep native build artifact and release asset names in the form
-  `server_<os>-<arch>__<sha256>`. The current Linux x64 name is
-  `server_linux-x64__<sha256>`, where `<sha256>` is the full lowercase file hash.
-- The CI artifact name, artifact file name, and release asset file name must be
-  identical.
+- Keep the build workflow artifact names as `server_jar` and
+  `server_linux_x64`. Do not add hashes to build artifact names.
+- Release assets must be named `server_jar__<sha256>.jar` and
+  `server_linux_x64__<sha256>`, where `<sha256>` is the full lowercase hash of
+  the uploaded file.
+- Publish a `SHA256SUMS` file alongside every release.
 - Keep the manifest main class as `ShimMain`.
 - Keep `server__autoLaunch.sh` running in the background.
 - Keep the interactive shell in the foreground with inherited stdio.
@@ -125,13 +124,14 @@ See `REPO_MAP.md` for the complete tracked and generated file map.
 ## CI/CD Behavior
 
 - `.github/workflows/build.yml` builds on pushes, pull requests, and manual
-  dispatches. It uploads `target/server.jar` as `server-jar` and
-  hash-named `server_<os>-<arch>__<sha256>` artifacts.
+  dispatches. It uploads `target/server.jar` as `server_jar` and
+  `build/native/server` as `server_linux_x64`.
 - The native CI job runs on Ubuntu 22.04 and includes a PTY smoke test.
 - `.github/workflows/release.yml` is manually dispatched with a successful
   GitHub Actions run ID and a semantic version.
-- The release workflow verifies the selected run, downloads both artifacts, and
-  gives each a build-specific filename.
+- The release workflow verifies the selected run, downloads both artifacts,
+  computes SHA-256 hashes, and publishes `server_jar__<sha256>.jar`,
+  `server_linux_x64__<sha256>`, and `SHA256SUMS`.
 - If the version does not exist, the workflow creates a draft release.
 - If the release already exists, the workflow adds the new build assets without
   replacing other build assets.

@@ -37,8 +37,8 @@
 
 | Path | Responsibility |
 | --- | --- |
-| `.github/workflows/build.yml` | Builds and verifies both delivery forms, then uploads `server-jar` and a hash-named `server_<os>-<arch>__<sha256>` native artifact. |
-| `.github/workflows/release.yml` | Manually attaches both artifacts from a selected build to a draft or existing release. |
+| `.github/workflows/build.yml` | Builds and verifies both delivery forms, then uploads `server_jar` and `server_linux_x64` artifacts. |
+| `.github/workflows/release.yml` | Hashes both build artifacts and attaches `server_jar__<sha256>.jar`, `server_linux_x64__<sha256>`, and `SHA256SUMS` to a draft or existing release. |
 | `.gitattributes` | Enforces line endings for shell, Windows, and text files. |
 | `.gitignore` | Excludes Maven/CMake output, jars, runtime-extracted scripts, IDE files, logs, and local secrets. |
 | `.mvn/wrapper/maven-wrapper.properties` | Pins the Maven distribution used by the wrapper. |
@@ -86,10 +86,10 @@
 `main`, and manual dispatch.
 
 - `build-jar` runs on `ubuntu-latest`, validates shell syntax, builds with
-  Maven, verifies the embedded resources, and uploads `server-jar`.
+  Maven, verifies the embedded resources, and uploads `server_jar`.
 - `build-native` runs on `ubuntu-22.04`, compiles with warnings as errors,
   verifies the embedded scripts, performs a PTY smoke test, and uploads
-  a hash-named native artifact in the form `server_<os>-<arch>__<sha256>`.
+  `server_linux_x64`.
 
 ### Release
 
@@ -98,11 +98,12 @@
 - `build_id`: a successful GitHub Actions run ID
 - `version`: a semantic version such as `v1.0.0`
 
-The workflow validates the selected build, downloads `server-jar` and the
-`server_linux-x64__<sha256>` native artifact, and preserves the native filename
-while versioning the jar asset.
-If the release exists, both assets are added to it. Otherwise, a draft release
-is created with both assets.
+The workflow validates the selected build, downloads `server_jar` and
+`server_linux_x64`, computes each file's SHA-256, and publishes hash-named
+copies as `server_jar__<sha256>.jar` and `server_linux_x64__<sha256>` together
+with `SHA256SUMS`.
+If the release exists, the assets are added to it. Otherwise, a draft release
+is created with all three assets.
 
 ## Generated Files
 
