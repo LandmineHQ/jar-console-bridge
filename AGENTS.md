@@ -70,7 +70,11 @@ For native changes, also verify:
 - Keep the Maven output name as `server.jar` for panel compatibility.
 - Keep the `server-jar` build workflow artifact name; release automation depends
   on it.
-- Keep the native build workflow artifact name as `server-binary`.
+- Keep native build artifact and release asset names in the form
+  `server_<os>-<arch>__<sha256>`. The current Linux x64 name is
+  `server_linux-x64__<sha256>`, where `<sha256>` is the full lowercase file hash.
+- The CI artifact name, artifact file name, and release asset file name must be
+  identical.
 - Keep the manifest main class as `ShimMain`.
 - Keep `server__autoLaunch.sh` running in the background.
 - Keep the interactive shell in the foreground with inherited stdio.
@@ -122,7 +126,7 @@ See `REPO_MAP.md` for the complete tracked and generated file map.
 
 - `.github/workflows/build.yml` builds on pushes, pull requests, and manual
   dispatches. It uploads `target/server.jar` as `server-jar` and
-  `build/native/server` as `server-binary`.
+  hash-named `server_<os>-<arch>__<sha256>` artifacts.
 - The native CI job runs on Ubuntu 22.04 and includes a PTY smoke test.
 - `.github/workflows/release.yml` is manually dispatched with a successful
   GitHub Actions run ID and a semantic version.

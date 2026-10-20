@@ -37,7 +37,7 @@
 
 | Path | Responsibility |
 | --- | --- |
-| `.github/workflows/build.yml` | Builds and verifies both delivery forms, then uploads `server-jar` and `server-binary`. |
+| `.github/workflows/build.yml` | Builds and verifies both delivery forms, then uploads `server-jar` and a hash-named `server_<os>-<arch>__<sha256>` native artifact. |
 | `.github/workflows/release.yml` | Manually attaches both artifacts from a selected build to a draft or existing release. |
 | `.gitattributes` | Enforces line endings for shell, Windows, and text files. |
 | `.gitignore` | Excludes Maven/CMake output, jars, runtime-extracted scripts, IDE files, logs, and local secrets. |
@@ -89,7 +89,7 @@
   Maven, verifies the embedded resources, and uploads `server-jar`.
 - `build-native` runs on `ubuntu-22.04`, compiles with warnings as errors,
   verifies the embedded scripts, performs a PTY smoke test, and uploads
-  `server-binary`.
+  a hash-named native artifact in the form `server_<os>-<arch>__<sha256>`.
 
 ### Release
 
@@ -98,8 +98,9 @@
 - `build_id`: a successful GitHub Actions run ID
 - `version`: a semantic version such as `v1.0.0`
 
-The workflow validates the selected build, downloads both `server-jar` and
-`server-binary`, and gives each artifact a version/build/commit-specific name.
+The workflow validates the selected build, downloads `server-jar` and the
+`server_linux-x64__<sha256>` native artifact, and preserves the native filename
+while versioning the jar asset.
 If the release exists, both assets are added to it. Otherwise, a draft release
 is created with both assets.
 

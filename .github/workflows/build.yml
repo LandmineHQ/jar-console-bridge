@@ -150,11 +150,25 @@ jobs:
           cmp src/main/resources/server__autoLaunch.sh build/native/server__autoLaunch.sh
           cmp src/main/resources/server__path.sh build/native/server__path.sh
 
+      - name: Package native binary
+        id: package_native
+        run: |
+          HASH="$(sha256sum build/native/server | awk '{print $1}')"
+          ASSET_NAME="server_linux-x64__${HASH}"
+          ASSET_PATH="build/native/${ASSET_NAME}"
+          cp build/native/server "$ASSET_PATH"
+          chmod +x "$ASSET_PATH"
+          test "$(sha256sum "$ASSET_PATH" | awk '{print $1}')" = "$HASH"
+          {
+            echo "name=$ASSET_NAME"
+            echo "sha256=$HASH"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Upload native binary
         uses: actions/upload-artifact@v7
         with:
-          name: server-binary
-          path: build/native/server
+          name: ${{ steps.package_native.outputs.name }}
+          path: build/native/${{ steps.package_native.outputs.name }}
           if-no-files-found: error
           retention-days: 90
 
@@ -165,7 +179,8 @@ jobs:
             echo
             echo "- Build ID: \`${{ github.run_id }}\`"
             echo "- Commit: \`${{ github.sha }}\`"
-            echo "- Artifact name: \`server-binary\`"
+            echo "- Artifact name: \`${{ steps.package_native.outputs.name }}\`"
+            echo "- SHA-256: \`${{ steps.package_native.outputs.sha256 }}\`"
             echo "- Platform: Linux x86_64 (fully static)"
             echo "- Runtime: no Java or C++ runtime required"
           } >> "$GITHUB_STEP_SUMMARY"

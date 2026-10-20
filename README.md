@@ -110,7 +110,11 @@ server__path.sh
 `.github/workflows/build.yml` 在每次构建中并行产生：
 
 - `server-jar`：`target/server.jar`
-- `server-binary`：`build/native/server`，Linux x86_64
+- `server_linux-x64__<sha256>`：`build/native/server`，Linux x86_64
+
+原生 artifact 名称包含操作系统、CPU 架构和完整 SHA-256。CI artifact 名称、
+artifact 内部文件名和 Release 资产名保持一致。后续增加其他架构时使用相同模式，
+例如 `server_linux-arm64__<sha256>` 或 `server_windows-x64__<sha256>`。
 
 原生任务还会执行编译警告检查、嵌入资源检查和伪终端启动冒烟测试。
 
@@ -119,5 +123,5 @@ artifact，并分别发布为：
 
 ```text
 jar-console-bridge-<version>-build-<run-id>-<sha>.jar
-jar-console-bridge-<version>-build-<run-id>-<sha>-linux-x64
+server_linux-x64__<sha256>
 ```

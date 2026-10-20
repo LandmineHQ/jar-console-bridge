@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       build_id:
-        description: "GitHub Actions run ID containing server-jar and server-binary artifacts"
+        description: "GitHub Actions run ID containing server-jar and hash-named native artifacts"
         required: true
         type: string
       version:
@@ -75,8 +75,9 @@ jobs:
       - name: Download native binary
         uses: actions/download-artifact@v8
         with:
-          name: server-binary
+          pattern: server_linux-x64__*
           path: release-assets/native
+          merge-multiple: true
           run-id: ${{ inputs.build_id }}
           repository: ${{ github.repository }}
           github-token: ${{ github.token }}
@@ -89,20 +90,35 @@ jobs:
           SHORT_SHA: ${{ steps.build.outputs.short_sha }}
         run: |
           JAR_SOURCE="release-assets/java/server.jar"
-          BINARY_SOURCE="release-assets/native/server"
+          BINARY_ASSET="$(find release-assets/native -maxdepth 1 -type f -name 'server_linux-x64__*' -print -quit)"
           test -f "$JAR_SOURCE"
-          test -f "$BINARY_SOURCE"
+          test -n "$BINARY_ASSET"
+
+          BINARY_NAME="$(basename "$BINARY_ASSET")"
+          FILENAME_HASH="${BINARY_NAME##*__}"
+          if [[ ! "$FILENAME_HASH" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "native artifact does not have a valid SHA-256 suffix: $BINARY_NAME" >&2
+            exit 1
+          fi
+
+          ACTUAL_HASH="$(sha256sum "$BINARY_ASSET" | awk '{print $1}')"
+          if [[ "$FILENAME_HASH" != "$ACTUAL_HASH" ]]; then
+            echo "native artifact hash does not match its filename." >&2
+            echo "filename=$FILENAME_HASH actual=$ACTUAL_HASH" >&2
+            exit 1
+          fi
 
           ASSET_PREFIX="jar-console-bridge-${VERSION}-build-${BUILD_ID}-${SHORT_SHA}"
           JAR_ASSET="release-assets/${ASSET_PREFIX}.jar"
-          BINARY_ASSET="release-assets/${ASSET_PREFIX}-linux-x64"
 
           mv "$JAR_SOURCE" "$JAR_ASSET"
-          mv "$BINARY_SOURCE" "$BINARY_ASSET"
           chmod +x "$BINARY_ASSET"
 
-          echo "jar=$JAR_ASSET" >> "$GITHUB_OUTPUT"
-          echo "binary=$BINARY_ASSET" >> "$GITHUB_OUTPUT"
+          {
+            echo "jar=$JAR_ASSET"
+            echo "binary=$BINARY_ASSET"
+            echo "binary_name=$BINARY_NAME"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create or update release
         env:
@@ -134,5 +150,5 @@ jobs:
             echo "- Version: \`${{ inputs.version }}\`"
             echo "- Build ID: \`${{ inputs.build_id }}\`"
             echo "- Java asset: \`${{ steps.assets.outputs.jar }}\`"
-            echo "- Native asset: \`${{ steps.assets.outputs.binary }}\`"
+            echo "- Native asset: \`${{ steps.assets.outputs.binary_name }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
