@@ -1,0 +1,13 @@
+#pragma once
+
+#include <string_view>
+
+namespace shim::resources {
+
+inline constexpr std::string_view kAutoLaunchScript =
+    R"SHIM_AUTO_LAUNCH(@SHIM_AUTO_LAUNCH_SCRIPT@)SHIM_AUTO_LAUNCH";
+
+inline constexpr std::string_view kPathScript =
+    R"SHIM_PATH(@SHIM_PATH_SCRIPT@)SHIM_PATH";
+
+}  // namespace shim::resources

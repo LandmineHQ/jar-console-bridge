@@ -19,8 +19,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build server.jar
+  build-jar:
+    name: Build Java jar
     runs-on: ubuntu-latest
 
     steps:
@@ -34,12 +34,19 @@ jobs:
           java-version: "21"
           cache: maven
 
+      - name: Validate shell resources
+        run: |
+          bash -n src/main/resources/server__autoLaunch.sh
+          sh -n src/main/resources/server__autoLaunch.sh
+          sh -n src/main/resources/server__path.sh
+
       - name: Build
         run: ./mvnw -B -ntp clean package
 
       - name: Verify artifact
         run: |
           test -f target/server.jar
+          jar tf target/server.jar | grep -qx "META-INF/MANIFEST.MF"
           jar tf target/server.jar | grep -qx "ShimMain.class"
           jar tf target/server.jar | grep -qx "server__autoLaunch.sh"
           jar tf target/server.jar | grep -qx "server__path.sh"
@@ -55,9 +62,110 @@ jobs:
       - name: Write build information
         run: |
           {
-            echo "## Build artifact"
+            echo "## Java build artifact"
             echo
             echo "- Build ID: \`${{ github.run_id }}\`"
             echo "- Commit: \`${{ github.sha }}\`"
             echo "- Artifact name: \`server-jar\`"
+            echo "- Runtime: Java 8+"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build-native:
+    name: Build native binary (linux-x64)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Configure
+        run: |
+          cmake -S native -B build/native \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSHIM_FULLY_STATIC=ON \
+            -DSHIM_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build build/native --parallel
+
+      - name: Verify binary
+        run: |
+          test -x build/native/server
+          FILE_OUTPUT="$(file build/native/server)"
+          printf '%s\n' "$FILE_OUTPUT"
+          grep -Eq "ELF 64-bit.*x86-64" <<< "$FILE_OUTPUT"
+
+          LDD_OUTPUT="$(ldd build/native/server 2>&1 || true)"
+          printf '%s\n' "$LDD_OUTPUT"
+          grep -Eq "not a dynamic executable|statically linked" <<< "$LDD_OUTPUT"
+
+          grep -a -F "server__autoLaunch.sh" build/native/server
+          grep -a -F "server__path.sh" build/native/server
+
+      - name: Smoke test
+        run: |
+          EXPECTED_HOME="$(cd build/native && pwd)"
+          NODE_STUB="${EXPECTED_HOME}/opt/node-v20.11.0-linux-x64/bin/node"
+          mkdir -p "$(dirname "$NODE_STUB")"
+          printf '#!/bin/sh\nexit 0\n' > "$NODE_STUB"
+          chmod +x "$NODE_STUB"
+          export EXPECTED_HOME
+          export EXPECTED_NODE="$NODE_STUB"
+
+          set +e
+          OUTPUT="$(
+            (
+              sleep 1
+              cat <<'SHIM_COMMANDS'
+          if [ "$PWD" = "$EXPECTED_HOME" ]; then
+            echo __SHIM_PWD_OK__
+          else
+            echo __SHIM_PWD_FAILED__
+          fi
+          if [ "$(command -v node)" = "$EXPECTED_NODE" ]; then
+            echo __SHIM_PATH_OK__
+          else
+            echo __SHIM_PATH_FAILED__
+          fi
+          exit
+          SHIM_COMMANDS
+            ) |
+              timeout 20s script -qec 'stty cols 512; exec ./build/native/server' /dev/null 2>&1
+          )"
+          STATUS=$?
+          set -e
+
+          printf '%s\n' "$OUTPUT"
+          if [ "$STATUS" -ne 0 ]; then
+            echo "native smoke test failed with status $STATUS" >&2
+            exit 1
+          fi
+
+          grep -Fq "[shim-native] using shell:" <<< "$OUTPUT"
+          grep -Fq "[autoLaunch] background script started" <<< "$OUTPUT"
+          grep -Fq "[autoLaunch] working dir: ${EXPECTED_HOME}" <<< "$OUTPUT"
+          grep -Fq "[autoLaunch] node path: ${NODE_STUB}" <<< "$OUTPUT"
+          grep -Fq "__SHIM_PWD_OK__" <<< "$OUTPUT"
+          grep -Fq "__SHIM_PATH_OK__" <<< "$OUTPUT"
+          cmp src/main/resources/server__autoLaunch.sh build/native/server__autoLaunch.sh
+          cmp src/main/resources/server__path.sh build/native/server__path.sh
+
+      - name: Upload native binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: server-binary
+          path: build/native/server
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Write build information
+        run: |
+          {
+            echo "## Native build artifact"
+            echo
+            echo "- Build ID: \`${{ github.run_id }}\`"
+            echo "- Commit: \`${{ github.sha }}\`"
+            echo "- Artifact name: \`server-binary\`"
+            echo "- Platform: Linux x86_64 (fully static)"
+            echo "- Runtime: no Java or C++ runtime required"
           } >> "$GITHUB_STEP_SUMMARY"

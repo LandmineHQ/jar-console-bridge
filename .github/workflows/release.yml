@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       build_id:
-        description: "GitHub Actions run ID that contains the server-jar artifact"
+        description: "GitHub Actions run ID containing server-jar and server-binary artifacts"
         required: true
         type: string
       version:
@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   release:
-    name: Publish server.jar
+    name: Publish jar and native binary
     runs-on: ubuntu-latest
 
     steps:
@@ -67,42 +67,59 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: server-jar
-          path: release-assets
+          path: release-assets/java
           run-id: ${{ inputs.build_id }}
           repository: ${{ github.repository }}
           github-token: ${{ github.token }}
 
-      - name: Prepare release asset
-        id: asset
+      - name: Download native binary
+        uses: actions/download-artifact@v8
+        with:
+          name: server-binary
+          path: release-assets/native
+          run-id: ${{ inputs.build_id }}
+          repository: ${{ github.repository }}
+          github-token: ${{ github.token }}
+
+      - name: Prepare release assets
+        id: assets
         env:
           BUILD_ID: ${{ inputs.build_id }}
           VERSION: ${{ inputs.version }}
           SHORT_SHA: ${{ steps.build.outputs.short_sha }}
         run: |
-          SOURCE="release-assets/server.jar"
-          test -f "$SOURCE"
+          JAR_SOURCE="release-assets/java/server.jar"
+          BINARY_SOURCE="release-assets/native/server"
+          test -f "$JAR_SOURCE"
+          test -f "$BINARY_SOURCE"
 
-          ASSET="release-assets/jar-console-bridge-${VERSION}-build-${BUILD_ID}-${SHORT_SHA}.jar"
-          mv "$SOURCE" "$ASSET"
+          ASSET_PREFIX="jar-console-bridge-${VERSION}-build-${BUILD_ID}-${SHORT_SHA}"
+          JAR_ASSET="release-assets/${ASSET_PREFIX}.jar"
+          BINARY_ASSET="release-assets/${ASSET_PREFIX}-linux-x64"
 
-          echo "path=$ASSET" >> "$GITHUB_OUTPUT"
+          mv "$JAR_SOURCE" "$JAR_ASSET"
+          mv "$BINARY_SOURCE" "$BINARY_ASSET"
+          chmod +x "$BINARY_ASSET"
+
+          echo "jar=$JAR_ASSET" >> "$GITHUB_OUTPUT"
+          echo "binary=$BINARY_ASSET" >> "$GITHUB_OUTPUT"
 
       - name: Create or update release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
-          ASSET: ${{ steps.asset.outputs.path }}
+          JAR_ASSET: ${{ steps.assets.outputs.jar }}
+          BINARY_ASSET: ${{ steps.assets.outputs.binary }}
           HEAD_SHA: ${{ steps.build.outputs.head_sha }}
         run: |
           if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $VERSION already exists. Adding build asset."
-            gh release upload "$VERSION" "$ASSET" \
+            echo "Release $VERSION already exists. Adding build assets."
+            gh release upload "$VERSION" "$JAR_ASSET" "$BINARY_ASSET" \
               --repo "$GITHUB_REPOSITORY" \
               --clobber
           else
             echo "Release $VERSION does not exist. Creating a draft release."
-            gh release create "$VERSION" "$ASSET" \
-              --repo "$GITHUB_REPOSITORY" \
+            gh release create "$VERSION" "$JAR_ASSET" "$BINARY_ASSET" \
               --draft \
               --title "$VERSION" \
               --target "$HEAD_SHA" \
@@ -116,5 +133,6 @@ jobs:
             echo
             echo "- Version: \`${{ inputs.version }}\`"
             echo "- Build ID: \`${{ inputs.build_id }}\`"
-            echo "- Asset: \`${{ steps.asset.outputs.path }}\`"
+            echo "- Java asset: \`${{ steps.assets.outputs.jar }}\`"
+            echo "- Native asset: \`${{ steps.assets.outputs.binary }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
